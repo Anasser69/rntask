@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { buildApiUrl } from '../config/api';
 
 const SignUpScreen = ({ navigation }: any) => {
   const [name, setName] = useState('');
@@ -61,10 +62,8 @@ const SignUpScreen = ({ navigation }: any) => {
   };
 
   const handleSignUp = async () => {
-    // Reset general error
     setGeneralError('');
     
-    // Validate all inputs
     const isNameValid = validateName(name);
     const isEmailValid = validateEmail(email);
     const isPasswordValid = validatePassword(password);
@@ -77,17 +76,42 @@ const SignUpScreen = ({ navigation }: any) => {
     setLoading(true);
     
     try {
-      // Create user object to send to API
+    
+      let emailExists = false;
+      try {
+        const checkEmailUrl = buildApiUrl(`users?email=${encodeURIComponent(email)}`);
+        console.log('Checking email URL:', checkEmailUrl);
+        
+        const checkResponse = await fetch(checkEmailUrl);
+        
+        if (checkResponse.ok) {
+          const existingUsers = await checkResponse.json();
+          emailExists = existingUsers.length > 0;
+        }
+      } catch (checkError) {
+        console.log('Email check failed, proceeding with registration anyway');
+      }
+      
+      if (emailExists) {
+        setEmailError('This email is already registered. Please use a different email or sign in.');
+        setLoading(false);
+        return;
+      }
+      
       const userData = {
         email: email,
         password: password,
         name: name,
-        sessionKey: ""
+        sessionKey: "",
+        registeredEvents: []
       };
       
-      // Make POST request to create user
+      const signUpUrl = buildApiUrl('users');
+      console.log('Sign up URL:', signUpUrl);
+      console.log('Sign up data:', JSON.stringify(userData));
+      
       const response = await fetch(
-        'https://680f9a8867c5abddd195f75a.mockapi.io/task/api/vi/users',
+        signUpUrl,
         {
           method: 'POST',
           headers: {
@@ -97,18 +121,38 @@ const SignUpScreen = ({ navigation }: any) => {
         }
       );
       
-      const data = await response.json();
+      console.log('Sign up response status:', response.status);
       
-      if (response.ok) {
-        // User created successfully, navigate to SignIn
-        navigation.navigate('SignIn');
-      } else {
-        // Handle API error
-        setGeneralError('Failed to create account. Please try again.');
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response body:', errorText);
+        throw new Error(`Failed to create account: ${response.status}`);
       }
+      
+      const responseData = await response.json();
+      console.log('Sign up successful, response data:', responseData);
+      
+      Alert.alert(
+        'Account Created',
+        'Your account has been created successfully. Please sign in.',
+        [
+          { 
+            text: 'OK', 
+            onPress: () => navigation.navigate('SignIn')
+          }
+        ]
+      );
     } catch (error) {
       console.error('Sign up error:', error);
-      setGeneralError('Network error. Please check your connection and try again.');
+      if (error instanceof Error) {
+        if (error.message.includes('Failed to create account')) {
+          setGeneralError('Failed to create account. The server returned an error.');
+        } else {
+          setGeneralError('Network error. Please check your connection and try again.');
+        }
+      } else {
+        setGeneralError('An unexpected error occurred. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

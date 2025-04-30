@@ -1,81 +1,228 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, FlatList, StatusBar, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useEffect } from "react";
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  FlatList,
+  StatusBar,
+  Image,
+  ActivityIndicator,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useTheme } from "../theme/ThemeProvider";
+import { buildApiUrl } from "../config/api";
 
-// Sample data for the home screen
-const dummyData = [
-  { id: '1', title: 'Task 1', description: 'Complete the project design', icon: 'document-text' },
-  { id: '2', title: 'Task 2', description: 'Review pull requests', icon: 'git-pull-request' },
-  { id: '3', title: 'Task 3', description: 'Team meeting at 3 PM', icon: 'people' },
-  { id: '4', title: 'Task 4', description: 'Prepare presentation slides', icon: 'easel' },
-  { id: '5', title: 'Task 5', description: 'Deploy the new version', icon: 'rocket' },
-];
 
-const HomeScreen = ({ navigation }) => {
-  const renderItem = ({ item, index }) => (
-    <TouchableOpacity 
-      style={[styles.itemContainer, { transform: [{ translateY: index % 2 === 0 ? 0 : 10 }] }]}
+interface Event {
+  id: string;
+  title: string;
+  name?: string;
+  date: string;
+  price: string;
+  image: string;
+  imageUrl?: string;
+  location: string;
+  description?: string;
+}
+
+
+type RootStackParamList = {
+  HomeScreen: undefined;
+  EventDetails: { event: Event };
+};
+
+type HomeScreenProps = {
+  navigation: NativeStackNavigationProp<RootStackParamList, "HomeScreen">;
+};
+
+
+type RenderItemProps = {
+  item: Event;
+  index: number;
+};
+
+const HomeScreen = ({ navigation }: HomeScreenProps) => {
+  const { colors, theme } = useTheme();
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [userName, setUserName] = useState("User");
+
+  useEffect(() => {
+    fetchEvents();
+    fetchUserInfo();
+  }, []);
+
+  const fetchUserInfo = async () => {
+    try {
+      setError(""); 
+      const userId = await AsyncStorage.getItem("userId");
+      if (!userId) {
+        console.warn("No user ID found in storage");
+        return;
+      }
+
+      const response = await fetch(buildApiUrl(`users/${userId}`));
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch user info: ${response.status}`);
+      }
+
+      const userData = await response.json();
+      if (userData && userData.name) {
+        setUserName(userData.name);
+      } else if (userData && userData.email) {
+        
+        const emailName = userData.email.split("@")[0];
+        setUserName(emailName);
+      }
+    } catch (error) {
+      console.error("Error fetching user info:", error);
+     
+      setUserName("User");
+    }
+  };
+
+  const fetchEvents = async () => {
+    try {
+      const response = await fetch(buildApiUrl("events"));
+
+      if (!response.ok) {
+        throw new Error("Network response was not ok");
+      }
+
+      const data = await response.json();
+      setEvents(data);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching events:", error);
+      setError("Failed to load events. Please try again later.");
+      setLoading(false);
+    }
+  };
+
+  const renderEventCard = ({ item, index }: RenderItemProps) => (
+    <TouchableOpacity
+      style={[
+        styles.eventCard,
+        {
+          transform: [{ translateY: index % 2 === 0 ? 0 : 10 }],
+          backgroundColor: colors.card,
+        },
+      ]}
+      onPress={() => navigation.navigate("EventDetails", { event: item })}
     >
-      <View style={styles.iconContainer}>
-        <Ionicons name={item.icon} size={24} color="#007BFF" />
-      </View>
-      <View style={styles.itemContent}>
-        <Text style={styles.itemTitle}>{item.title}</Text>
-        <Text style={styles.itemDescription}>{item.description}</Text>
+      <Image
+        source={{
+          uri:
+            item.imageUrl ||
+            item.image ||
+            "https://via.placeholder.com/300x150?text=No+Image",
+        }}
+        style={styles.eventImage}
+        resizeMode="cover"
+      />
+      <View style={styles.eventContent}>
+        <Text style={[styles.eventTitle, { color: colors.text }]}>
+          {item.title}
+        </Text>
+        {item.name && item.name !== item.title && (
+          <Text style={[styles.eventName, { color: colors.text }]}>
+            {item.name}
+          </Text>
+        )}
+        <View style={styles.eventInfo}>
+          <View style={styles.eventInfoItem}>
+            <Ionicons
+              name="calendar-outline"
+              size={16}
+              color={colors.primary}
+            />
+            <Text style={[styles.eventInfoText, { color: colors.text }]}>
+              {item.date}
+            </Text>
+          </View>
+          <View style={styles.eventInfoItem}>
+            <Ionicons
+              name="pricetag-outline"
+              size={16}
+              color={colors.primary}
+            />
+            <Text style={[styles.eventInfoText, { color: colors.text }]}>
+              ${item.price}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.eventInfoItem}>
+          <Ionicons name="location-outline" size={16} color={colors.primary} />
+          <Text style={[styles.eventInfoText, { color: colors.text }]}>
+            {item.location}
+          </Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f8f9fa" />
-      
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hello,</Text>
-          <Text style={styles.username}>John Doe</Text>
-        </View>
-        <TouchableOpacity style={styles.notificationButton}>
-          <Ionicons name="notifications" size={24} color="#333" />
-          <View style={styles.notificationBadge} />
-        </TouchableOpacity>
-      </View>
-      
-      <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>5</Text>
-          <Text style={styles.statLabel}>Tasks</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>3</Text>
-          <Text style={styles.statLabel}>In Progress</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>2</Text>
-          <Text style={styles.statLabel}>Completed</Text>
-        </View>
-      </View>
-      
-      <View style={styles.listHeader}>
-        <Text style={styles.listTitle}>Your Tasks</Text>
-        <TouchableOpacity>
-          <Text style={styles.seeAllText}>See All</Text>
-        </TouchableOpacity>
-      </View>
-      
-      <FlatList
-        data={dummyData}
-        renderItem={renderItem}
-        keyExtractor={item => item.id}
-        style={styles.list}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      edges={["top", "left", "right"]}
+    >
+      <StatusBar
+        barStyle={theme === "dark" ? "light-content" : "dark-content"}
+        backgroundColor={colors.background}
       />
-      
-      <TouchableOpacity style={styles.addButton}>
-        <Ionicons name="add" size={30} color="#fff" />
-      </TouchableOpacity>
+
+      <View style={[styles.header, { backgroundColor: colors.background }]}>
+        <View>
+          <Text style={[styles.greeting, { color: colors.text }]}>Hello,</Text>
+          <Text style={[styles.username, { color: colors.text }]}>
+            {userName}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.listHeader}>
+        <Text style={[styles.listTitle, { color: colors.text }]}>
+          Upcoming Events
+        </Text>
+      </View>
+
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Ionicons
+            name="alert-circle-outline"
+            size={48}
+            color={colors.error}
+          />
+          <Text style={[styles.errorText, { color: colors.error }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            onPress={fetchEvents}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={events}
+          renderItem={renderEventCard}
+          keyExtractor={(item) => item.id}
+          style={styles.list}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -83,93 +230,63 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    paddingBottom: 80, // Space for the tab bar
+    paddingBottom: 80,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 10,
   },
   greeting: {
     fontSize: 16,
-    color: '#666',
+    color: "#666",
   },
   username: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   notificationButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
   notificationBadge: {
-    position: 'absolute',
+    position: "absolute",
     top: 8,
     right: 8,
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#FF3B30',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginTop: 20,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 15,
-    marginHorizontal: 5,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#007BFF',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 5,
+    backgroundColor: "#FF3B30",
   },
   listHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
-    marginTop: 30,
+    marginTop: 20,
     marginBottom: 10,
   },
   listTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   seeAllText: {
     fontSize: 14,
-    color: '#007BFF',
+    color: "#007BFF",
   },
   list: {
     flex: 1,
@@ -178,56 +295,78 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
-  itemContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: "#007BFF",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  eventCard: {
+    backgroundColor: "#fff",
     borderRadius: 15,
-    padding: 15,
     marginBottom: 15,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    overflow: "hidden",
   },
-  iconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(0, 123, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
+  eventImage: {
+    width: "100%",
+    height: 150,
   },
-  itemContent: {
-    flex: 1,
-    justifyContent: 'center',
+  eventContent: {
+    padding: 15,
   },
-  itemTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+  eventTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 10,
+  },
+  eventInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  eventInfoItem: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 5,
   },
-  itemDescription: {
+  eventInfoText: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
+    marginLeft: 5,
   },
-  addButton: {
-    position: 'absolute',
-    right: 30,
-    bottom: 100,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#007BFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 8,
+  eventName: {
+    fontSize: 14,
+    color: "#555",
+    marginBottom: 8,
+    fontStyle: "italic",
   },
 });
 

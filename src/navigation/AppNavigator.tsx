@@ -1,31 +1,53 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { ParamListBase, TabNavigationState } from '@react-navigation/native';
+import { useTheme } from '../theme/ThemeProvider';
 
-// Import screens
+declare module '@react-navigation/bottom-tabs' {
+  export interface BottomTabNavigationOptions {
+    testID?: string;
+  }
+}
+
 import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import EventDetailsScreen from '../screens/EventDetailsScreen';
 
-const Stack = createNativeStackNavigator();
+export type RootStackParamList = {
+  SignIn: undefined;
+  SignUp: undefined;
+  MainApp: undefined;
+  EventDetails: { event: any };
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator();
 
-// Custom tab bar component for floating effect
-const CustomTabBar = ({ state, descriptors, navigation }) => {
+
+const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
+  const { colors, theme } = useTheme();
+  
   return (
     <View style={styles.tabBarContainer}>
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, { backgroundColor: colors.tabBarBackground }]}>
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const label = options.tabBarLabel || options.title || route.name;
           const isFocused = state.index === index;
 
           const icon = options.tabBarIcon ? 
-            options.tabBarIcon({ focused: isFocused, color: isFocused ? '#007BFF' : '#888', size: 24 }) : 
+            options.tabBarIcon({ 
+              focused: isFocused, 
+              color: isFocused ? colors.tabBarActive : colors.tabBarInactive, 
+              size: 24 
+            }) : 
             null;
 
           const onPress = () => {
@@ -46,11 +68,11 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
               accessibilityRole="button"
               accessibilityState={isFocused ? { selected: true } : {}}
               accessibilityLabel={options.tabBarAccessibilityLabel}
-              testID={options.tabBarTestID}
+              testID={options.testID as string}
               onPress={onPress}
               style={[
                 styles.tabItem,
-                isFocused ? styles.tabItemFocused : null
+                isFocused ? [styles.tabItemFocused, { backgroundColor: `${colors.tabBarActive}20` }] : null
               ]}
             >
               {icon}
@@ -62,8 +84,10 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
   );
 };
 
-// Tab Navigator for Home and Profile
+
 const TabNavigator = () => {
+  const { colors } = useTheme();
+  
   return (
     <Tab.Navigator
       screenOptions={{
@@ -95,10 +119,35 @@ const TabNavigator = () => {
 };
 
 const AppNavigator = () => {
+  const { theme, colors } = useTheme();
+  
+ 
+  const navigationTheme = theme === 'dark' ? {
+    ...DarkTheme,
+    colors: {
+      ...DarkTheme.colors,
+      primary: colors.primary,
+      background: colors.background,
+      card: colors.card,
+      text: colors.text,
+      border: colors.border,
+    }
+  } : {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      primary: colors.primary,
+      background: colors.background,
+      card: colors.card,
+      text: colors.text,
+      border: colors.border,
+    }
+  };
+  
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navigationTheme}>
       <Stack.Navigator initialRouteName="SignIn">
-        {/* Auth Screens */}
+        
         <Stack.Screen 
           name="SignIn" 
           component={SignInScreen} 
@@ -110,10 +159,17 @@ const AppNavigator = () => {
           options={{ headerShown: false }}
         />
         
-        {/* Main App (Tabs) */}
+    
         <Stack.Screen 
           name="MainApp" 
           component={TabNavigator} 
+          options={{ headerShown: false }}
+        />
+        
+
+        <Stack.Screen 
+          name="EventDetails" 
+          component={EventDetailsScreen} 
           options={{ headerShown: false }}
         />
       </Stack.Navigator>
@@ -121,7 +177,6 @@ const AppNavigator = () => {
   );
 };
 
-// Update the styles at the bottom of the file
 const styles = StyleSheet.create({
   tabBarContainer: {
     position: 'absolute',
